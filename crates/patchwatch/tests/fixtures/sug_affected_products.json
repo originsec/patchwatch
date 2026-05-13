@@ -1,0 +1,12 @@
+{
+  "value": [
+    {
+      "cveNumber": "CVE-2026-00001",
+      "product": "Windows 11 Version 23H2 for x64-based Systems",
+      "kbArticles": [
+        {"articleName": "5034123", "articleUrl": "https://support.microsoft.com/help/5034123",
+         "fixedBuildNumber": "10.0.22631.4000", "rebootRequired": "Yes"}
+      ]
+    }
+  ]
+}

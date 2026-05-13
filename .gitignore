@@ -1,0 +1,21 @@
+# Rust
+/target
+**/target/
+
+# Cargo lock is committed for application crates; leave it tracked.
+
+# Secrets / local config
+.env
+*.env.local
+crates/patchwatch/config.yaml
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store

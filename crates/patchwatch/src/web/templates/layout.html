@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>PatchWatch &mdash; {% block title %}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js" defer></script>
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      document.body.addEventListener("htmx:configRequest", function(evt) {
+        var meta = document.querySelector("meta[name=csrf-token]");
+        if (meta) evt.detail.headers["X-CSRF-Token"] = meta.getAttribute("content");
+      });
+    });
+  </script>
+</head>
+<body>
+  <header>
+    <nav><a href="/cves">PatchWatch</a></nav>
+  </header>
+  <main>{% block content %}{% endblock %}</main>
+</body>
+</html>

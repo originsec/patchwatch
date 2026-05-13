@@ -1,0 +1,63 @@
+{% extends "layout.html" %}
+{% block title %}Report: {{ cve_id }}{% endblock %}
+{% block content %}
+<h1>Report: {{ cve_id }}{% if let Some(t) = title %} &mdash; {{ t }}{% endif %}</h1>
+
+{% if let Some(syn) = synthesis %}
+<section class="synthesis">
+  <h2>Synthesis</h2>
+  <p>{{ syn.overall_summary }}</p>
+</section>
+{% endif %}
+
+{% for b in binaries %}
+<section class="binary-group">
+  <h2>{{ b.filename }}</h2>
+  <p class="patch-summary">{{ b.patch_summary }}</p>
+  {% for f in b.findings %}
+  <section class="finding">
+    <h3>{{ f.finding.function_name }}</h3>
+    <p>Relevance: {{ f.finding.relevance }}</p>
+    <p>{{ f.finding.summary }}</p>
+    <div class="diff-pair">
+      <div class="diff-before">
+        <h4>Before</h4>
+        <div class="code">{{ f.old_html|safe }}</div>
+      </div>
+      <div class="diff-after">
+        <h4>After</h4>
+        <div class="code">{{ f.new_html|safe }}</div>
+      </div>
+    </div>
+  </section>
+  {% endfor %}
+</section>
+{% endfor %}
+
+{% if let Some(html) = report_html %}
+<section class="legacy-report">
+  <h2>Full Report</h2>
+  <div class="markdown-body">{{ html|safe }}</div>
+</section>
+{% endif %}
+
+<section class="poc-export">
+  <h2>Export PoC Context</h2>
+  <p class="patch-summary">Create a self-contained pocsmith workspace with binaries, ghidriff output, and context.json.</p>
+  <form hx-post="/cves/{{ cve_id }}/export-poc"
+        hx-target="#poc-export-result"
+        hx-swap="innerHTML"
+        class="poc-export-form">
+    <label for="poc-out-dir">Output directory</label>
+    <div class="folder-input-wrap">
+      <span class="folder-icon" aria-hidden="true">&#128193;</span>
+      <input type="text" id="poc-out-dir" name="out"
+             placeholder="C:\workspaces\pocsmith"
+             class="folder-input"
+             required>
+    </div>
+    <button type="submit">Export</button>
+  </form>
+  <div id="poc-export-result"></div>
+</section>
+{% endblock %}

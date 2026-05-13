@@ -1,0 +1,77 @@
+{% extends "layout.html" %}
+{% block title %}{{ detail.cve_id }}{% endblock %}
+{% block content %}
+<h1>{{ detail.cve_id }}{% if let Some(t) = detail.title %} &mdash; {{ t }}{% endif %}</h1>
+<dl>
+  <dt>CVSS</dt><dd>{% if let Some(s) = detail.cvss_score %}{{ s }}{% if let Some(v) = detail.cvss_vector %}<br><code>{{ v }}</code>{% endif %}{% else %}&mdash;{% endif %}</dd>
+  <dt>Exploited</dt><dd>{% if detail.exploited %}Yes{% else %}No{% endif %}</dd>
+  <dt>CWE</dt><dd>{% if let Some(c) = detail.cwe %}{{ c }}{% else %}&mdash;{% endif %}</dd>
+  <dt>KB</dt><dd>{% if let Some(kb) = detail.kb_id %}{{ kb }} ({% if let Some(n) = detail.file_count %}{{ n }}{% else %}?{% endif %} files){% else %}&mdash;{% endif %}</dd>
+  <dt>Revised</dt><dd>{% if let Some(d) = detail.last_revised_at %}{{ d }}{% else %}&mdash;{% endif %}</dd>
+</dl>
+
+{% if let Some(desc) = detail.description %}
+<section>
+  <h2>Description</h2>
+  {{ desc|safe }}
+</section>
+{% endif %}
+
+<section id="analyze-area">
+{% if let Some(job) = latest_job %}
+  {% if job.is_terminal() %}
+    {% if job.status == "done" %}
+      <p>Analysis complete. <a href="/cves/{{ detail.cve_id }}/report">View report &rarr;</a></p>
+    {% else %}
+      <p>Last analysis failed: {% if let Some(e) = job.error %}{{ e }}{% else %}unknown error{% endif %}</p>
+      <button hx-post="/cves/{{ detail.cve_id }}/analyze"
+              hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+              hx-target="body" hx-push-url="true">
+        Retry Analysis
+      </button>
+    {% endif %}
+  {% else %}
+    <div hx-get="/jobs/{{ job.id }}/status"
+         hx-trigger="every 2s"
+         hx-swap="outerHTML">
+      <p>Status: {{ job.status }}&hellip;</p>
+      <button hx-post="/cves/{{ detail.cve_id }}/abort"
+              hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+              hx-target="body" hx-push-url="true">Abort</button>
+    </div>
+  {% endif %}
+{% else %}
+  <button hx-post="/cves/{{ detail.cve_id }}/analyze"
+          hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+          hx-target="body" hx-push-url="true">
+    Run Analysis
+  </button>
+{% endif %}
+</section>
+
+<section>
+  <h2>Triage</h2>
+  {% if rankings.is_empty() %}
+    {% if triage_eligible %}
+    <p>No triage rankings yet &mdash; click <strong>Run Analysis</strong> above to generate them.</p>
+    {% else %}
+    <p>No triage data &mdash; CVE does not meet threshold (CVSS &ge; 9.0 or actively exploited).</p>
+    {% endif %}
+  {% else %}
+    <table>
+      <thead>
+        <tr><th>File</th><th>Confidence</th><th>Reasoning</th></tr>
+      </thead>
+      <tbody>
+        {% for r in rankings %}
+        <tr>
+          <td><code>{{ r.filename }}</code></td>
+          <td>{{ r.confidence }}</td>
+          <td>{{ r.reasoning }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+</section>
+{% endblock %}

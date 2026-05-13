@@ -1,0 +1,50 @@
+msrc:
+  sug_base_url: "https://api.msrc.microsoft.com/sug/v2.0"
+  language: "en-US"
+
+kb_enumeration:
+  support_base_url: "https://support.microsoft.com"
+
+update_catalog:
+  base_url: "https://catalog.update.microsoft.com"
+  user_agent: "patchwatch/0.0.1"
+
+winbindex:
+  base_url: "https://winbindex.m417z.com"
+  user_agent: "patchwatch/0.0.1"
+
+llm:
+  model_primary: "claude-sonnet-4-6"
+  model_fallback: "claude-haiku-4-5-20251001"
+  api_key_env: "ANTHROPIC_API_KEY"
+  triage_top_n: 5
+  max_diff_candidates: 5
+
+# diff_engine: run ghidriff in Docker (no local Ghidra required)
+# Use the locally-built ghidriff-fixed image (see Dockerfile.ghidriff) — the
+# upstream :latest image ships Ghidra 11.3.1 but pyghidra 3.x requires 12.0+.
+# Fix: https://github.com/clearbluejar/ghidriff/issues/134
+diff_engine:
+  mode: docker
+  image: "ghidriff-fixed:latest"
+  volume_root: "~/patchwatch/ghidriff"
+  extra_args: []
+
+# diff_engine: run ghidriff from a local install (pip install ghidriff)
+# diff_engine:
+#   mode: local
+#   ghidriff_bin: "ghidriff"
+#   ghidra_install_dir: "C:/ghidra"
+#   output_dir: "~/patchwatch/ghidriff"
+
+storage:
+  base_dir: "~/patchwatch"
+
+web:
+  bind_addr: "127.0.0.1:8765"
+  # Name of the env var holding the CSRF secret (required for POST /analyze).
+  csrf_secret_env: "PATCHWATCH_CSRF_SECRET"
+  page_size: 25
+  # Set to true only if fronting with a reverse proxy.
+  allow_non_loopback: false
+  db_pool_size: 8

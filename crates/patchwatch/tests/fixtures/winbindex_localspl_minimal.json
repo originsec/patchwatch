@@ -1,0 +1,43 @@
+{
+  "abc123": {
+    "fileInfo": {
+      "size": 805376,
+      "machineType": 34404,
+      "timestamp": 1712534400,
+      "virtualSize": 819200,
+      "version": "10.0.22631.4000",
+      "description": "Local Print Spooler",
+      "sha256": "abc123"
+    },
+    "windowsVersions": {
+      "11-23H2": {
+        "KB5034123": {
+          "updateInfo": {
+            "releaseDate": "2026-04-08",
+            "releaseVersion": "10.0.22631.4000"
+          }
+        }
+      }
+    }
+  },
+  "def456": {
+    "fileInfo": {
+      "size": 805000,
+      "machineType": 34404,
+      "timestamp": 1709856000,
+      "virtualSize": 819200,
+      "version": "10.0.22631.3880",
+      "sha256": "def456"
+    },
+    "windowsVersions": {
+      "11-23H2": {
+        "KB5034000": {
+          "updateInfo": {
+            "releaseDate": "2026-03-11",
+            "releaseVersion": "10.0.22631.3880"
+          }
+        }
+      }
+    }
+  }
+}

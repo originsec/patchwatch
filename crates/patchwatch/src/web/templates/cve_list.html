@@ -1,0 +1,71 @@
+{% extends "layout.html" %}
+{% block title %}CVE List{% endblock %}
+{% block content %}
+<h1>CVEs</h1>
+<form method="get" action="/cves">
+  <input type="text" name="q" value="{{ q }}" placeholder="Search...">
+  <label><input type="checkbox" name="exploited" value="1" {% if exploited_only %}checked{% endif %}> Exploited only</label>
+  <button type="submit">Filter</button>
+</form>
+<table>
+  <thead>
+    <tr>
+      <th>
+        {% if sort == "cve" %}
+          {% if sort_dir == "asc" %}
+            <a href="/cves?q={{ q }}&sort=cve&dir=desc{% if exploited_only %}&exploited=1{% endif %}">CVE ▲</a>
+          {% else %}
+            <a href="/cves?q={{ q }}&sort=cve&dir=asc{% if exploited_only %}&exploited=1{% endif %}">CVE ▼</a>
+          {% endif %}
+        {% else %}
+          <a href="/cves?q={{ q }}&sort=cve&dir=asc{% if exploited_only %}&exploited=1{% endif %}">CVE</a>
+        {% endif %}
+      </th>
+      <th>Title</th>
+      <th>
+        {% if sort == "cvss" %}
+          {% if sort_dir == "asc" %}
+            <a href="/cves?q={{ q }}&sort=cvss&dir=desc{% if exploited_only %}&exploited=1{% endif %}">CVSS ▲</a>
+          {% else %}
+            <a href="/cves?q={{ q }}&sort=cvss&dir=asc{% if exploited_only %}&exploited=1{% endif %}">CVSS ▼</a>
+          {% endif %}
+        {% else %}
+          <a href="/cves?q={{ q }}&sort=cvss&dir=desc{% if exploited_only %}&exploited=1{% endif %}">CVSS</a>
+        {% endif %}
+      </th>
+      <th>Exploited</th>
+      <th>
+        {% if sort == "kb" %}
+          {% if sort_dir == "asc" %}
+            <a href="/cves?q={{ q }}&sort=kb&dir=desc{% if exploited_only %}&exploited=1{% endif %}">KB ▲</a>
+          {% else %}
+            <a href="/cves?q={{ q }}&sort=kb&dir=asc{% if exploited_only %}&exploited=1{% endif %}">KB ▼</a>
+          {% endif %}
+        {% else %}
+          <a href="/cves?q={{ q }}&sort=kb&dir=asc{% if exploited_only %}&exploited=1{% endif %}">KB</a>
+        {% endif %}
+      </th>
+      <th>Files</th><th>Status</th><th>Revised</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td><a href="/cves/{{ row.cve_id }}">{{ row.cve_id }}</a></td>
+      <td>{% if let Some(t) = row.title %}{{ t }}{% else %}&mdash;{% endif %}</td>
+      <td>{% if let Some(s) = row.cvss_score %}{{ s }}{% else %}&mdash;{% endif %}</td>
+      <td>{% if row.exploited %}Yes{% else %}No{% endif %}</td>
+      <td>{% if let Some(kb) = row.kb_id %}{{ kb }}{% else %}&mdash;{% endif %}</td>
+      <td>{% if let Some(n) = row.file_count %}{{ n }}{% else %}&mdash;{% endif %}</td>
+      <td><span class="status-{{ row.status.as_str() }}">{{ row.status.as_str() }}</span></td>
+      <td>{% if let Some(d) = row.last_revised_at %}{{ d }}{% else %}&mdash;{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<div class="pagination">
+  {% if page > 1 %}<a href="/cves?q={{ q }}&page={{ page - 1 }}{% if exploited_only %}&exploited=1{% endif %}{% if sort != "" %}&sort={{ sort }}&dir={{ sort_dir }}{% endif %}">&laquo; Prev</a>{% endif %}
+  <span>Page {{ page }}</span>
+  {% if rows.len() == page_size %}<a href="/cves?q={{ q }}&page={{ page + 1 }}{% if exploited_only %}&exploited=1{% endif %}{% if sort != "" %}&sort={{ sort }}&dir={{ sort_dir }}{% endif %}">Next &raquo;</a>{% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,7 @@
+{
+  "value": [
+    {"cveNumber": "CVE-2026-00001", "cveTitle": "First", "baseScore": 7.5},
+    {"cveNumber": "CVE-2026-00002", "cveTitle": "Second", "baseScore": 8.0}
+  ],
+  "@odata.nextLink": "REPLACE_ME/sug/v2.0/en-US/vulnerability?$skip=2"
+}

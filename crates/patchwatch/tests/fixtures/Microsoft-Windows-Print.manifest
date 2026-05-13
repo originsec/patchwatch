@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly>
+  <assemblyIdentity name="Microsoft-Windows-Print" version="10.0.22621.4000" processorArchitecture="amd64" />
+  <file name="localspl.dll" destinationPath="$(runtime.system32)\" sourceName="localspl.dll" />
+  <file name="spoolsv.exe" destinationPath="$(runtime.system32)\" sourceName="spoolsv.exe" />
+</assembly>

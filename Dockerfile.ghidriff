@@ -1,0 +1,6 @@
+FROM ghcr.io/clearbluejar/ghidriff:latest
+
+# pyghidra 3.x (pulled in by ghidriff>=1.0.0) requires Ghidra 12.0+, but the
+# image ships Ghidra 11.3.1.  Pin pyghidra back to the last version that
+# supports Ghidra 11.3.x (see https://github.com/clearbluejar/ghidriff/issues/134).
+RUN pip install --upgrade --force-reinstall "pyghidra==2.2.1" && pip check

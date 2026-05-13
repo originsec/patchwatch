@@ -1,0 +1,9 @@
+Windows 11, version 24H2 LCU arm64-based
+"File name","File version","Date","Time","File size"
+"localspl.dll","10.0.26100.8246","11-Apr-2026","21:53","720,384"
+"spoolsv.exe","10.0.26100.8246","11-Apr-2026","21:53","800,000"
+Windows 11, version 24H2 LCU x64-based
+"File name","File version","Date","Time","File size"
+"localspl.dll","10.0.26100.8246","11-Apr-2026","21:53","805,376"
+"spoolsv.exe","10.0.26100.8246","11-Apr-2026","21:53","824,320"
+"win32k.sys","10.0.26100.8246","11-Apr-2026","21:53","8,192,000"

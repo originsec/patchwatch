@@ -1,0 +1,25 @@
+{
+  "@odata.context": "stub",
+  "value": [
+    {
+      "cveNumber": "CVE-2026-12345",
+      "cveTitle": "Sample Vulnerability",
+      "baseScore": 8.8,
+      "temporalScore": 7.7,
+      "vectorString": "CVSS:3.1/AV:N",
+      "severity": "Important",
+      "impact": "Remote Code Execution",
+      "issuingCna": "Microsoft",
+      "tag": "Microsoft Print Spooler",
+      "exploited": "No",
+      "publiclyDisclosed": "No",
+      "customerActionRequired": false,
+      "isMariner": false,
+      "releaseNumber": "2026-Apr",
+      "releaseDate": "2026-04-08T07:00:00Z",
+      "revisionNumber": "1.0",
+      "description": "An attacker can do a thing.",
+      "cweList": ["CWE-416: Use After Free"]
+    }
+  ]
+}

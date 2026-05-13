@@ -1,0 +1,19 @@
+{% if job.is_terminal() %}
+<div id="analyze-area">
+  {% if job.status == "done" %}
+  <p>Analysis complete. <a href="/cves/{{ job.cve_id }}/report">View report &rarr;</a></p>
+  {% else %}
+  <p>Analysis failed: {% if let Some(e) = job.error %}{{ e }}{% else %}unknown error{% endif %}</p>
+  {% endif %}
+</div>
+{% else %}
+<div id="analyze-area"
+     hx-get="/jobs/{{ job.id }}/status"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML">
+  <p>Status: {{ job.status }}&hellip;</p>
+  <button hx-post="/cves/{{ job.cve_id }}/abort"
+          hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+          hx-target="body" hx-push-url="true">Abort</button>
+</div>
+{% endif %}
