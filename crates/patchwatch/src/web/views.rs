@@ -4,10 +4,19 @@ use askama::Template;
 
 // ---- template structs ----
 
+pub struct MonthGroup {
+    pub label: String,
+    pub key: String,
+    pub count: usize,
+    pub rows: Vec<CveListRow>,
+}
+
 #[derive(Template)]
 #[template(path = "cve_list.html")]
 pub struct CveListView {
     pub rows: Vec<CveListRow>,
+    pub groups: Vec<MonthGroup>,
+    pub group_by_month: bool,
     pub q: String,
     pub exploited_only: bool,
     pub sort: String,
@@ -15,6 +24,7 @@ pub struct CveListView {
     pub page: usize,
     pub page_size: usize,
     pub total: usize,
+    pub has_more: bool,
     pub csrf_token: String,
 }
 

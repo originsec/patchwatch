@@ -8,6 +8,7 @@
   <dt>CWE</dt><dd>{% if let Some(c) = detail.cwe %}{{ c }}{% else %}&mdash;{% endif %}</dd>
   <dt>KB</dt><dd>{% if let Some(kb) = detail.kb_id %}{{ kb }} ({% if let Some(n) = detail.file_count %}{{ n }}{% else %}?{% endif %} files){% else %}&mdash;{% endif %}</dd>
   <dt>Revised</dt><dd>{% if let Some(d) = detail.last_revised_at %}{{ d }}{% else %}&mdash;{% endif %}</dd>
+  <dt>MSRC</dt><dd><a href="https://msrc.microsoft.com/update-guide/vulnerability/{{ detail.cve_id }}" target="_blank" rel="noopener">{{ detail.cve_id }} on MSRC &rarr;</a></dd>
 </dl>
 
 {% if let Some(desc) = detail.description %}
