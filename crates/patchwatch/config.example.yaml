@@ -1,6 +1,11 @@
 msrc:
   sug_base_url: "https://api.msrc.microsoft.com/sug/v2.0"
   language: "en-US"
+  # OS family to match against MSRC product names. Defaults to "windows 11".
+  #windows_family: "windows 11"
+  # Pin KB picks to a specific Windows version token (e.g. "26h1", "24h2", "23h2").
+  # If omitted, picks the highest available build for the configured OS family.
+  #windows_version: "26h1"
 
 kb_enumeration:
   support_base_url: "https://support.microsoft.com"
@@ -19,6 +24,15 @@ llm:
   api_key_env: "ANTHROPIC_API_KEY"
   triage_top_n: 5
   max_diff_candidates: 5
+  # Minimum CVSS base score to trigger LLM triage during `poll`. Set to 0.0 to triage every CVE.
+  min_cvss_score: 9.0
+  # During `poll`, triage CVEs marked exploited=yes regardless of their CVSS score.
+  triage_exploited: true
+  # Minimum CVSS base score to trigger auto-analyze (binary diff + deep analysis) during `poll`.
+  # Explicit `patchwatch analyze` and the web "Run Analysis" button ignore this gate.
+  min_cvss_score_analyze: 9.0
+  # During `poll`, auto-analyze CVEs marked exploited=yes regardless of their CVSS score.
+  analyze_exploited: true
 
 # diff_engine: run ghidriff in Docker (no local Ghidra required)
 # Use the locally-built ghidriff-fixed image (see Dockerfile.ghidriff) — the

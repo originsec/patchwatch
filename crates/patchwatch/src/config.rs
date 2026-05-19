@@ -6,6 +6,18 @@ use std::path::{Path, PathBuf};
 pub struct MsrcConfig {
     pub sug_base_url: String,
     pub language: String,
+    /// OS family to match against MSRC product names (e.g. "windows 11", "windows 10").
+    /// Matched case-insensitively as a substring. Defaults to "windows 11".
+    #[serde(default = "default_windows_family")]
+    pub windows_family: String,
+    /// Optional Windows release token to pin KB picks to (e.g. "26h1", "24h2").
+    /// When unset, the highest `fixed_build_number` in the configured family wins.
+    #[serde(default)]
+    pub windows_version: Option<String>,
+}
+
+fn default_windows_family() -> String {
+    "windows 11".to_string()
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -26,15 +38,26 @@ pub struct LlmConfig {
     /// Maximum number of ranked functions (per binary) to send to the Stage 2 deep analysis pass.
     #[serde(default = "default_deep_analysis_top_n")]
     pub deep_analysis_top_n: usize,
+    /// Minimum CVSS base score required to trigger LLM triage. Set to 0.0 to triage all CVEs.
+    #[serde(default = "default_min_cvss_score")]
+    pub min_cvss_score: f64,
+    /// If true, CVEs marked exploited=yes are triaged regardless of their CVSS score.
+    #[serde(default = "default_triage_exploited")]
+    pub triage_exploited: bool,
+    /// Minimum CVSS base score required to trigger automatic binary diff + analysis.
+    #[serde(default = "default_min_cvss_score_analyze")]
+    pub min_cvss_score_analyze: f64,
+    /// If true, CVEs marked exploited=yes are analyzed regardless of their CVSS score.
+    #[serde(default = "default_analyze_exploited")]
+    pub analyze_exploited: bool,
 }
 
-fn default_max_diff_candidates() -> usize {
-    5
-}
-
-fn default_deep_analysis_top_n() -> usize {
-    10
-}
+fn default_max_diff_candidates() -> usize { 5 }
+fn default_deep_analysis_top_n() -> usize { 10 }
+fn default_min_cvss_score() -> f64 { 9.0 }
+fn default_triage_exploited() -> bool { true }
+fn default_min_cvss_score_analyze() -> f64 { 9.0 }
+fn default_analyze_exploited() -> bool { true }
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(tag = "mode", rename_all = "snake_case")]
@@ -181,6 +204,12 @@ mod tests {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("config.example.yaml");
         let cfg = Config::load(&path).expect("load example");
         assert_eq!(cfg.msrc.language, "en-US");
+        assert_eq!(cfg.msrc.windows_family, "windows 11");
+        assert_eq!(cfg.msrc.windows_version, None);
         assert_eq!(cfg.llm.triage_top_n, 5);
+        assert_eq!(cfg.llm.min_cvss_score, 9.0);
+        assert!(cfg.llm.triage_exploited);
+        assert_eq!(cfg.llm.min_cvss_score_analyze, 9.0);
+        assert!(cfg.llm.analyze_exploited);
     }
 }

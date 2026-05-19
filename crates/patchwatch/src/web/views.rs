@@ -36,6 +36,7 @@ pub struct CveDetailView {
     pub latest_job: Option<DiffJobRow>,
     pub has_report: bool,
     pub triage_eligible: bool,
+    pub min_cvss_score: f64,
     pub csrf_token: String,
 }
 

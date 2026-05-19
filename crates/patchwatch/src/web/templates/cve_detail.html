@@ -56,7 +56,7 @@
     {% if triage_eligible %}
     <p>No triage rankings yet &mdash; click <strong>Run Analysis</strong> above to generate them.</p>
     {% else %}
-    <p>No triage data &mdash; CVE does not meet threshold (CVSS &ge; 9.0 or actively exploited).</p>
+    <p>Auto-triage skipped: CVE is below the configured threshold (CVSS &ge; {{ min_cvss_score }}). Click <strong>Run Analysis</strong> above to triage and analyze manually.</p>
     {% endif %}
   {% else %}
     <table>

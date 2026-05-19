@@ -10,6 +10,20 @@ use reqwest::Client;
 use std::sync::Arc;
 use tracing::{info, warn};
 
+/// Returns true when a CVE meets the configured auto-triage threshold.
+/// Used by `poll` to decide whether to run LLM triage during ingest.
+pub fn is_triage_eligible(cfg: &Config, score: f64, exploited: bool) -> bool {
+    score >= cfg.llm.min_cvss_score || (cfg.llm.triage_exploited && exploited)
+}
+
+/// Returns true when a CVE meets the configured auto-analyze threshold.
+/// Used by `poll` to decide whether to run binary diff + deep analysis during ingest.
+/// Explicit `patchwatch analyze` invocations and the web "Run Analysis" button do
+/// NOT consult this — those always run regardless of severity.
+pub fn is_analyze_eligible(cfg: &Config, score: f64, exploited: bool) -> bool {
+    score >= cfg.llm.min_cvss_score_analyze || (cfg.llm.analyze_exploited && exploited)
+}
+
 pub struct IngestResult {
     pub cve_id: String,
     pub kb_id: String,
@@ -25,8 +39,21 @@ fn is_numeric_kb(name: &str) -> bool {
     !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
 }
 
-/// Pick the KB for the most recent desktop x64 Windows SKU from an affected-products list.
-pub fn pick_desktop_kb(products: &[AffectedProduct]) -> Option<String> {
+/// Pick the KB for the highest-patched desktop x64 SKU from an affected-products list.
+///
+/// Returns `(kb_id, product_name)` so the caller can log which OS version was selected.
+///
+/// `windows_family` is matched case-insensitively against the product name (e.g. "windows 11").
+/// `windows_version` further restricts to a specific release token (e.g. "26h1"). When `None`,
+/// all qualifying products in the family are eligible and the highest `fixed_build_number` wins.
+pub fn pick_desktop_kb(
+    products: &[AffectedProduct],
+    windows_family: &str,
+    windows_version: Option<&str>,
+) -> Option<(String, String)> {
+    let family_token = windows_family.to_ascii_lowercase();
+    let version_token = windows_version.map(|v| v.to_ascii_lowercase());
+
     let has_numeric_kb = |p: &AffectedProduct| -> bool {
         p.kb_articles
             .as_deref()
@@ -35,10 +62,10 @@ pub fn pick_desktop_kb(products: &[AffectedProduct]) -> Option<String> {
             .any(|kb| kb.article_name.as_deref().map_or(false, is_numeric_kb))
     };
 
-    let is_win11_26h1_x64 = |p: &AffectedProduct| -> bool {
+    let is_target_product = |p: &AffectedProduct| -> bool {
         let name = p.product.as_deref().unwrap_or("").to_ascii_lowercase();
-        name.contains("windows 11")
-            && name.contains("26h1")
+        name.contains(&family_token)
+            && version_token.as_deref().map_or(true, |v| name.contains(v))
             && !name.contains("server")
             && !name.contains("arm64")
             && !name.contains("arm-based")
@@ -63,16 +90,17 @@ pub fn pick_desktop_kb(products: &[AffectedProduct]) -> Option<String> {
 
     let best = products
         .iter()
-        .filter(|p| is_win11_26h1_x64(p) && has_numeric_kb(p))
-        .max_by_key(|p| build_number(p));
+        .filter(|p| is_target_product(p) && has_numeric_kb(p))
+        .max_by_key(|p| build_number(p))?;
 
-    best
-        .and_then(|p| p.kb_articles.as_deref())
-        .and_then(|kbs| {
-            kbs.iter()
-                .find(|kb| kb.article_name.as_deref().map_or(false, is_numeric_kb))
-        })
-        .and_then(|kb| kb.article_name.clone())
+    let product_name = best.product.clone().unwrap_or_default();
+    let kb_id = best
+        .kb_articles
+        .as_deref()
+        .and_then(|kbs| kbs.iter().find(|kb| kb.article_name.as_deref().map_or(false, is_numeric_kb)))
+        .and_then(|kb| kb.article_name.clone())?;
+
+    Some((kb_id, product_name))
 }
 
 #[cfg(test)]
@@ -102,18 +130,47 @@ mod pick_desktop_kb_tests {
     }
 
     #[test]
-    fn picks_win11_26h1_x64_kb() {
+    fn picks_highest_build_when_unpinned() {
+        // With no version pin, the product with the highest fixed_build_number wins,
+        // regardless of which release it belongs to.
         let products = vec![
-            product("Windows 11 Version 26H1 for x64-based Systems", "5090407"),
-            product("Windows 11 Version 24H2 for x64-based Systems", "5087429"),
+            product_with_build(
+                "Windows 11 Version 26H1 for x64-based Systems",
+                "5090407",
+                Some("10.0.27100.500"),
+            ),
+            product_with_build(
+                "Windows 11 Version 24H2 for x64-based Systems",
+                "5087429",
+                Some("10.0.26100.100"),
+            ),
             product("Windows Server 2025", "5040431"),
         ];
-        assert_eq!(pick_desktop_kb(&products).as_deref(), Some("5090407"));
+        let (kb, product_name) = pick_desktop_kb(&products, "windows 11", None).unwrap();
+        assert_eq!(kb, "5090407");
+        assert!(product_name.contains("26H1"), "should log the matched product");
     }
 
     #[test]
-    fn picks_higher_build_number_when_multiple_26h1_x64_present() {
-        // Two qualifying products — pick must use build_number tie-break (3rd dot-separated component).
+    fn version_pin_restricts_to_named_release() {
+        let products = vec![
+            product_with_build(
+                "Windows 11 Version 26H1 for x64-based Systems",
+                "5090407",
+                Some("10.0.27100.500"),
+            ),
+            product_with_build(
+                "Windows 11 Version 24H2 for x64-based Systems",
+                "5087429",
+                Some("10.0.26100.100"),
+            ),
+        ];
+        let (kb, _) = pick_desktop_kb(&products, "windows 11", Some("24h2")).unwrap();
+        assert_eq!(kb, "5087429");
+    }
+
+    #[test]
+    fn picks_highest_build_when_multiple_versions_of_same_release() {
         let products = vec![
             product_with_build(
                 "Windows 11 Version 26H1 for x64-based Systems",
@@ -126,26 +183,23 @@ mod pick_desktop_kb_tests {
                 Some("10.0.27100.500"),
             ),
         ];
-        assert_eq!(pick_desktop_kb(&products).as_deref(), Some("5090407"));
+        let (kb, _) = pick_desktop_kb(&products, "windows 11", None).unwrap();
+        assert_eq!(kb, "5090407");
     }
 
     #[test]
-    fn rejects_non_26h1_windows_versions() {
-        let products = vec![
-            product("Windows 10 Version 22H2 for x64-based Systems", "5040442"),
-            product("Windows 11 Version 24H2 for x64-based Systems", "5087429"),
-            product("Windows Server 2022", "5040431"),
-        ];
-        assert_eq!(pick_desktop_kb(&products), None);
-    }
-
-    #[test]
-    fn rejects_26h1_arm64() {
+    fn rejects_arm64_and_server() {
         let products = vec![
             product("Windows 11 Version 26H1 for ARM64-based Systems", "5090406"),
-            product("Windows 11 Version 26H1 for x64-based Systems", "5090407"),
+            product_with_build(
+                "Windows 11 Version 26H1 for x64-based Systems",
+                "5090407",
+                Some("10.0.27100.500"),
+            ),
+            product("Windows Server 2025", "5040431"),
         ];
-        assert_eq!(pick_desktop_kb(&products).as_deref(), Some("5090407"));
+        let (kb, _) = pick_desktop_kb(&products, "windows 11", None).unwrap();
+        assert_eq!(kb, "5090407");
     }
 
     #[test]
@@ -154,16 +208,21 @@ mod pick_desktop_kb_tests {
             product("ASP.NET Core 8.0", "Release Notes"),
             product("Microsoft Office 2024", "Click to Run"),
         ];
-        assert_eq!(pick_desktop_kb(&products), None);
+        assert_eq!(pick_desktop_kb(&products, "windows 11", None), None);
     }
 
     #[test]
     fn skips_bogus_kb_names_when_real_kb_present() {
         let products = vec![
             product("ASP.NET Core 8.0", "Release Notes"),
-            product("Windows 11 Version 26H1 for x64-based Systems", "5090407"),
+            product_with_build(
+                "Windows 11 Version 26H1 for x64-based Systems",
+                "5090407",
+                Some("10.0.27100.500"),
+            ),
         ];
-        assert_eq!(pick_desktop_kb(&products).as_deref(), Some("5090407"));
+        let (kb, _) = pick_desktop_kb(&products, "windows 11", None).unwrap();
+        assert_eq!(kb, "5090407");
     }
 }
 
@@ -189,14 +248,15 @@ pub async fn ingest_cve(
 
     let raw_json = serde_json::to_string(&cve).unwrap_or_default();
 
-    let raw_kb = pick_desktop_kb(&products)
-        .ok_or_else(|| anyhow!("no KB found in affectedProducts for {}", cve_id))?;
+    let (raw_kb, matched_product) =
+        pick_desktop_kb(&products, &cfg.msrc.windows_family, cfg.msrc.windows_version.as_deref())
+            .ok_or_else(|| anyhow!("no KB found in affectedProducts for {}", cve_id))?;
     let kb_id = if raw_kb.starts_with("KB") {
         raw_kb
     } else {
         format!("KB{}", raw_kb)
     };
-    info!(%kb_id, "picked KB");
+    info!(%kb_id, product = %matched_product, "picked KB");
 
     // Check if revision changed since last ingest. If the CVE is already in the DB at the
     // same revision and already has triage rankings, we can skip steps 2 and 3.
@@ -256,14 +316,18 @@ pub async fn ingest_cve(
         .map(|e| e.files.len())
         .unwrap_or(kb_files.len());
 
-    // 3. LLM triage — only for high-severity or actively exploited CVEs
+    // 3. LLM triage — gated by configurable CVSS threshold and exploited flag
     let score = cve.base_score.unwrap_or(0.0);
     let exploited = cve.exploited.as_deref()
         .map_or(false, |e| e.eq_ignore_ascii_case("yes"));
-    let triage_eligible = score >= 9.0 || exploited;
 
-    if !triage_eligible {
-        info!(%cve_id, score, "skipping triage: score < 9.0 and not exploited");
+    if !is_triage_eligible(cfg, score, exploited) {
+        info!(
+            %cve_id, score, exploited,
+            min_cvss = cfg.llm.min_cvss_score,
+            triage_exploited = cfg.llm.triage_exploited,
+            "skipping triage: does not meet configured auto-triage gate"
+        );
         return Ok(IngestResult { cve_id: cve_id.to_owned(), kb_id, n_files, n_triaged: 0 });
     }
 
@@ -295,4 +359,52 @@ pub async fn ingest_cve(
     let n_triaged = rankings.len();
 
     Ok(IngestResult { cve_id: cve_id.to_owned(), kb_id, n_files, n_triaged })
+}
+
+/// If the CVE meets the configured auto-analyze gate and no terminal-success or
+/// in-flight diff job exists yet, run `analyze_cve` synchronously.
+///
+/// Failures inside the orchestrator are logged and the job is marked `failed`;
+/// they never propagate up to fail the surrounding poll.
+pub async fn auto_analyze_if_eligible(
+    cfg: &Config,
+    db: &Arc<Db>,
+    http: &Client,
+    cve_id: &str,
+) -> Result<()> {
+    let detail = match db.get_cve(cve_id).await? {
+        Some(d) => d,
+        None => return Ok(()),
+    };
+    let score = detail.cvss_score.unwrap_or(0.0);
+    if !is_analyze_eligible(cfg, score, detail.exploited) {
+        return Ok(());
+    }
+    if let Some(job) = db.get_latest_diff_job(cve_id).await? {
+        if job.status == "done" {
+            info!(%cve_id, job_id = job.id, "skipping auto-analyze: previous job already complete");
+            return Ok(());
+        }
+        if !job.is_terminal() {
+            info!(%cve_id, job_id = job.id, status = %job.status, "skipping auto-analyze: job already in flight");
+            return Ok(());
+        }
+    }
+    info!(%cve_id, score, exploited = detail.exploited, "POLL step 4: auto-analyze");
+    let job_id = db.create_diff_job(cve_id).await?;
+    match crate::analyze::orchestrator::analyze_cve(cfg, db, http, cve_id, job_id, None).await {
+        Ok(r) => {
+            println!(
+                "[+] {} auto-analyzed: job={} diffed={} findings={}",
+                cve_id, r.job_id, r.n_diffed, r.n_findings
+            );
+        }
+        Err(e) => {
+            warn!(%cve_id, %e, "auto-analyze failed");
+            let _ = db
+                .update_diff_job_status(job_id, "failed", Some(&format!("{e}")))
+                .await;
+        }
+    }
+    Ok(())
 }
