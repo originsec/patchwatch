@@ -74,6 +74,7 @@ impl Default for CveFilter {
     }
 }
 
+#[derive(Clone)]
 pub struct CveListRow {
     pub cve_id: String,
     pub revision: Option<String>,

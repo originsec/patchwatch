@@ -158,3 +158,57 @@ form { display: inline-flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; 
   font-size: 0.9rem;
   margin: 0.5rem 0;
 }
+
+.group-toggle {
+  font-size: 0.85rem;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid #2563eb;
+  border-radius: 4px;
+  text-decoration: none;
+  color: #2563eb;
+  white-space: nowrap;
+}
+.group-toggle:hover { background: #eff6ff; }
+
+.month-group {
+  margin-bottom: 1.25rem;
+}
+
+.month-group-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  border-radius: 4px 4px 0 0;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+.month-group[open] > .month-group-header { border-radius: 4px 4px 0 0; }
+.month-group:not([open]) > .month-group-header { border-radius: 4px; }
+
+.month-group-header::-webkit-details-marker { display: none; }
+.month-group-header::before {
+  content: '\25B6';
+  font-size: 0.65rem;
+  transition: transform 0.15s ease;
+  display: inline-block;
+}
+.month-group[open] > .month-group-header::before { transform: rotate(90deg); }
+
+.month-group-label {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.month-group-count {
+  font-size: 0.8rem;
+  opacity: 0.75;
+  font-weight: normal;
+}
+
+.month-group table {
+  border-radius: 0 0 4px 4px;
+}

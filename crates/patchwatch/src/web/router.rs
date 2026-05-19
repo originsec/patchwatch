@@ -4,6 +4,7 @@ use super::jobs::AnalyzeService;
 use super::markdown::render_markdown;
 use super::views::{
     BinaryGroupView, CveDetailView, CveListView, CveReportView, FindingViewRow, JobStatusView,
+    MonthGroup,
 };
 use crate::config::Config;
 use crate::storage::{CveFilter, Db};
@@ -96,16 +97,19 @@ struct CveListQuery {
     page: Option<usize>,
     sort: Option<String>,
     dir: Option<String>,
+    group: Option<String>,
 }
+
+const MONTHS_PER_PAGE: usize = 3;
 
 async fn cve_list(
     State(state): State<AppState>,
     Query(params): Query<CveListQuery>,
     req: Request<Body>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let page = params.page.unwrap_or(1).max(1);
-    let page_size = state.cfg.web.page_size;
     let exploited_only = params.exploited.as_deref() == Some("1");
+    let group_by_month = params.group.as_deref() == Some("month");
+    let page_size = state.cfg.web.page_size;
 
     let search = params.q.as_ref().filter(|s| !s.is_empty()).cloned();
     let sort = params.sort.as_ref()
@@ -118,39 +122,134 @@ async fn cve_list(
             Some("cvss") => "desc".to_owned(),
             _ => "asc".to_owned(),
         });
-    let filter = CveFilter {
-        exploited_only,
-        search,
-        sort: sort.clone(),
-        sort_dir: Some(sort_dir.clone()),
-        limit: page_size + 1,
-        offset: (page - 1) * page_size,
-        ..CveFilter::default()
-    };
 
-    let mut rows = state.db.list_cves(filter).await.map_err(|e| {
-        tracing::error!("list_cves: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    let has_more = rows.len() > page_size;
-    if has_more {
-        rows.pop();
-    }
-    let total = rows.len();
     let csrf_token = get_csrf_cookie(req.headers());
+    let q_str = params.q.unwrap_or_default();
 
-    render_html(CveListView {
-        rows,
-        q: params.q.unwrap_or_default(),
-        exploited_only,
-        sort: sort.unwrap_or_default(),
-        sort_dir,
-        page,
-        page_size,
-        total,
-        csrf_token,
-    })
+    if group_by_month {
+        // Fetch all matching rows so month groups are never split across pages.
+        // Month-level pagination is applied after grouping.
+        let filter = CveFilter {
+            exploited_only,
+            search,
+            sort: sort.clone(),
+            sort_dir: Some(sort_dir.clone()),
+            limit: 10_000,
+            offset: 0,
+            ..CveFilter::default()
+        };
+        let all_rows = state.db.list_cves(filter).await.map_err(|e| {
+            tracing::error!("list_cves: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+        let all_groups = build_month_groups(&all_rows);
+        let total_months = all_groups.len();
+        let month_page = params.page.unwrap_or(1).max(1);
+        let month_offset = (month_page - 1) * MONTHS_PER_PAGE;
+        let has_more = month_offset + MONTHS_PER_PAGE < total_months;
+
+        let groups: Vec<MonthGroup> = all_groups
+            .into_iter()
+            .skip(month_offset)
+            .take(MONTHS_PER_PAGE)
+            .collect();
+
+        render_html(CveListView {
+            rows: vec![],
+            groups,
+            group_by_month: true,
+            q: q_str,
+            exploited_only,
+            sort: sort.unwrap_or_default(),
+            sort_dir,
+            page: month_page,
+            page_size: MONTHS_PER_PAGE,
+            total: total_months,
+            has_more,
+            csrf_token,
+        })
+    } else {
+        let page = params.page.unwrap_or(1).max(1);
+        let filter = CveFilter {
+            exploited_only,
+            search,
+            sort: sort.clone(),
+            sort_dir: Some(sort_dir.clone()),
+            limit: page_size + 1,
+            offset: (page - 1) * page_size,
+            ..CveFilter::default()
+        };
+
+        let mut rows = state.db.list_cves(filter).await.map_err(|e| {
+            tracing::error!("list_cves: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+        let has_more = rows.len() > page_size;
+        if has_more {
+            rows.pop();
+        }
+        let total = rows.len();
+
+        render_html(CveListView {
+            rows,
+            groups: vec![],
+            group_by_month: false,
+            q: q_str,
+            exploited_only,
+            sort: sort.unwrap_or_default(),
+            sort_dir,
+            page,
+            page_size,
+            total,
+            has_more,
+            csrf_token,
+        })
+    }
+}
+
+fn build_month_groups(rows: &[crate::storage::CveListRow]) -> Vec<MonthGroup> {
+    use std::collections::BTreeMap;
+
+    let mut map: BTreeMap<String, Vec<crate::storage::CveListRow>> = BTreeMap::new();
+    for row in rows {
+        let key = row.last_revised_at
+            .as_deref()
+            .and_then(|d| d.get(..7))
+            .unwrap_or("unknown")
+            .to_owned();
+        map.entry(key).or_default().push(row.clone());
+    }
+
+    map.into_iter()
+        .rev()
+        .map(|(key, rows)| {
+            let count = rows.len();
+            MonthGroup {
+                label: month_key_to_label(&key),
+                key,
+                count,
+                rows,
+            }
+        })
+        .collect()
+}
+
+fn month_key_to_label(key: &str) -> String {
+    if key == "unknown" {
+        return "Unknown".to_owned();
+    }
+    let mut parts = key.splitn(2, '-');
+    let year = parts.next().unwrap_or(key);
+    let month_num: u32 = parts.next().and_then(|m| m.parse().ok()).unwrap_or(0);
+    let name = match month_num {
+        1 => "January", 2 => "February", 3 => "March", 4 => "April",
+        5 => "May", 6 => "June", 7 => "July", 8 => "August",
+        9 => "September", 10 => "October", 11 => "November", 12 => "December",
+        _ => return key.to_owned(),
+    };
+    format!("{name} {year}")
 }
 
 async fn cve_detail(

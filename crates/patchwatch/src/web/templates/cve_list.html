@@ -4,18 +4,76 @@
 <h1>CVEs</h1>
 <form method="get" action="/cves">
   <input type="text" name="q" value="{{ q }}" placeholder="Search...">
+  {% if group_by_month %}<input type="hidden" name="group" value="month">{% endif %}
   <label><input type="checkbox" name="exploited" value="1" {% if exploited_only %}checked{% endif %}> Exploited only</label>
   <button type="submit">Filter</button>
+  {% if group_by_month %}
+    <a class="group-toggle" href="/cves?q={{ q }}{% if exploited_only %}&exploited=1{% endif %}{% if sort != "" %}&sort={{ sort }}&dir={{ sort_dir }}{% endif %}">Ungroup</a>
+  {% else %}
+    <a class="group-toggle" href="/cves?q={{ q }}&group=month{% if exploited_only %}&exploited=1{% endif %}{% if sort != "" %}&sort={{ sort }}&dir={{ sort_dir }}{% endif %}">Group by Month</a>
+  {% endif %}
 </form>
+
+{% if group_by_month %}
+  {% for group in groups %}
+  <details class="month-group" open>
+    <summary class="month-group-header">
+      <span class="month-group-label">{{ group.label }}</span>
+      <span class="month-group-count">{{ group.count }} CVE{% if group.count != 1 %}s{% endif %}</span>
+    </summary>
+    <table>
+      <thead>
+        <tr>
+          <th>
+            {% if sort == "cve" %}
+              {% if sort_dir == "asc" %}<a href="/cves?q={{ q }}&sort=cve&dir=desc{% if exploited_only %}&exploited=1{% endif %}&group=month">CVE &#9650;</a>
+              {% else %}<a href="/cves?q={{ q }}&sort=cve&dir=asc{% if exploited_only %}&exploited=1{% endif %}&group=month">CVE &#9660;</a>{% endif %}
+            {% else %}<a href="/cves?q={{ q }}&sort=cve&dir=asc{% if exploited_only %}&exploited=1{% endif %}&group=month">CVE</a>{% endif %}
+          </th>
+          <th>Title</th>
+          <th>
+            {% if sort == "cvss" %}
+              {% if sort_dir == "asc" %}<a href="/cves?q={{ q }}&sort=cvss&dir=desc{% if exploited_only %}&exploited=1{% endif %}&group=month">CVSS &#9650;</a>
+              {% else %}<a href="/cves?q={{ q }}&sort=cvss&dir=asc{% if exploited_only %}&exploited=1{% endif %}&group=month">CVSS &#9660;</a>{% endif %}
+            {% else %}<a href="/cves?q={{ q }}&sort=cvss&dir=desc{% if exploited_only %}&exploited=1{% endif %}&group=month">CVSS</a>{% endif %}
+          </th>
+          <th>Exploited</th>
+          <th>
+            {% if sort == "kb" %}
+              {% if sort_dir == "asc" %}<a href="/cves?q={{ q }}&sort=kb&dir=desc{% if exploited_only %}&exploited=1{% endif %}&group=month">KB &#9650;</a>
+              {% else %}<a href="/cves?q={{ q }}&sort=kb&dir=asc{% if exploited_only %}&exploited=1{% endif %}&group=month">KB &#9660;</a>{% endif %}
+            {% else %}<a href="/cves?q={{ q }}&sort=kb&dir=asc{% if exploited_only %}&exploited=1{% endif %}&group=month">KB</a>{% endif %}
+          </th>
+          <th>Files</th><th>Status</th><th>Revised</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in group.rows %}
+        <tr>
+          <td><a href="/cves/{{ row.cve_id }}">{{ row.cve_id }}</a></td>
+          <td>{% if let Some(t) = row.title %}{{ t }}{% else %}&mdash;{% endif %}</td>
+          <td>{% if let Some(s) = row.cvss_score %}{{ s }}{% else %}&mdash;{% endif %}</td>
+          <td>{% if row.exploited %}Yes{% else %}No{% endif %}</td>
+          <td>{% if let Some(kb) = row.kb_id %}{{ kb }}{% else %}&mdash;{% endif %}</td>
+          <td>{% if let Some(n) = row.file_count %}{{ n }}{% else %}&mdash;{% endif %}</td>
+          <td><span class="status-{{ row.status.as_str() }}">{{ row.status.as_str() }}</span></td>
+          <td>{% if let Some(d) = row.last_revised_at %}{{ d }}{% else %}&mdash;{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endfor %}
+{% else %}
 <table>
   <thead>
     <tr>
       <th>
         {% if sort == "cve" %}
           {% if sort_dir == "asc" %}
-            <a href="/cves?q={{ q }}&sort=cve&dir=desc{% if exploited_only %}&exploited=1{% endif %}">CVE ▲</a>
+            <a href="/cves?q={{ q }}&sort=cve&dir=desc{% if exploited_only %}&exploited=1{% endif %}">CVE &#9650;</a>
           {% else %}
-            <a href="/cves?q={{ q }}&sort=cve&dir=asc{% if exploited_only %}&exploited=1{% endif %}">CVE ▼</a>
+            <a href="/cves?q={{ q }}&sort=cve&dir=asc{% if exploited_only %}&exploited=1{% endif %}">CVE &#9660;</a>
           {% endif %}
         {% else %}
           <a href="/cves?q={{ q }}&sort=cve&dir=asc{% if exploited_only %}&exploited=1{% endif %}">CVE</a>
@@ -25,9 +83,9 @@
       <th>
         {% if sort == "cvss" %}
           {% if sort_dir == "asc" %}
-            <a href="/cves?q={{ q }}&sort=cvss&dir=desc{% if exploited_only %}&exploited=1{% endif %}">CVSS ▲</a>
+            <a href="/cves?q={{ q }}&sort=cvss&dir=desc{% if exploited_only %}&exploited=1{% endif %}">CVSS &#9650;</a>
           {% else %}
-            <a href="/cves?q={{ q }}&sort=cvss&dir=asc{% if exploited_only %}&exploited=1{% endif %}">CVSS ▼</a>
+            <a href="/cves?q={{ q }}&sort=cvss&dir=asc{% if exploited_only %}&exploited=1{% endif %}">CVSS &#9660;</a>
           {% endif %}
         {% else %}
           <a href="/cves?q={{ q }}&sort=cvss&dir=desc{% if exploited_only %}&exploited=1{% endif %}">CVSS</a>
@@ -37,9 +95,9 @@
       <th>
         {% if sort == "kb" %}
           {% if sort_dir == "asc" %}
-            <a href="/cves?q={{ q }}&sort=kb&dir=desc{% if exploited_only %}&exploited=1{% endif %}">KB ▲</a>
+            <a href="/cves?q={{ q }}&sort=kb&dir=desc{% if exploited_only %}&exploited=1{% endif %}">KB &#9650;</a>
           {% else %}
-            <a href="/cves?q={{ q }}&sort=kb&dir=asc{% if exploited_only %}&exploited=1{% endif %}">KB ▼</a>
+            <a href="/cves?q={{ q }}&sort=kb&dir=asc{% if exploited_only %}&exploited=1{% endif %}">KB &#9660;</a>
           {% endif %}
         {% else %}
           <a href="/cves?q={{ q }}&sort=kb&dir=asc{% if exploited_only %}&exploited=1{% endif %}">KB</a>
@@ -63,9 +121,11 @@
     {% endfor %}
   </tbody>
 </table>
+{% endif %}
+
 <div class="pagination">
-  {% if page > 1 %}<a href="/cves?q={{ q }}&page={{ page - 1 }}{% if exploited_only %}&exploited=1{% endif %}{% if sort != "" %}&sort={{ sort }}&dir={{ sort_dir }}{% endif %}">&laquo; Prev</a>{% endif %}
+  {% if page > 1 %}<a href="/cves?q={{ q }}&page={{ page - 1 }}{% if exploited_only %}&exploited=1{% endif %}{% if sort != "" %}&sort={{ sort }}&dir={{ sort_dir }}{% endif %}{% if group_by_month %}&group=month{% endif %}">&laquo; Prev</a>{% endif %}
   <span>Page {{ page }}</span>
-  {% if rows.len() == page_size %}<a href="/cves?q={{ q }}&page={{ page + 1 }}{% if exploited_only %}&exploited=1{% endif %}{% if sort != "" %}&sort={{ sort }}&dir={{ sort_dir }}{% endif %}">Next &raquo;</a>{% endif %}
+  {% if has_more %}<a href="/cves?q={{ q }}&page={{ page + 1 }}{% if exploited_only %}&exploited=1{% endif %}{% if sort != "" %}&sort={{ sort }}&dir={{ sort_dir }}{% endif %}{% if group_by_month %}&group=month{% endif %}">Next &raquo;</a>{% endif %}
 </div>
 {% endblock %}
