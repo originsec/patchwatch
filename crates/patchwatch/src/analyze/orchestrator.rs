@@ -93,10 +93,19 @@ pub async fn analyze_cve(
     let candidates: Vec<String> = if let Some(b) = override_binary {
         vec![b.to_string()]
     } else {
-        sorted_rankings.iter().map(|r| r.filename.clone()).collect()
+        // Deduplicate by lowercase filename — triage can rank the same binary twice
+        // (e.g. d3d12.dll appeared twice in CVE-2026-40403), wasting a diff slot and
+        // producing duplicate report entries. Rankings are sorted descending by
+        // confidence, so the first (highest-confidence) occurrence wins.
+        let mut seen = std::collections::HashSet::new();
+        sorted_rankings.iter()
+            .map(|r| r.filename.clone())
+            .filter(|f| seen.insert(f.to_ascii_lowercase()))
+            .collect()
     };
 
     let mut diffed: Vec<BinaryDiffResult> = Vec::new();
+    let mut skipped: Vec<String> = Vec::new();
 
     for filename in &candidates {
         if diffed.len() >= max {
@@ -105,7 +114,11 @@ pub async fn analyze_cve(
         info!(%filename, "trying winbindex");
         let map = match wb.fetch_file_data(filename).await {
             Ok(m) => m,
-            Err(e) => { warn!(%filename, %e, "winbindex fetch failed, skipping"); continue; }
+            Err(e) => {
+                warn!(%filename, %e, "winbindex fetch failed, skipping");
+                skipped.push(format!("{} (winbindex fetch failed: {})", filename, e));
+                continue;
+            }
         };
 
         let kb_version = kb_files
@@ -115,17 +128,29 @@ pub async fn analyze_cve(
 
         let pair = match select_pair(&map, &kb_id, Arch::X64, kb_version) {
             Some(p) => p,
-            None => { info!(%filename, "no pair in winbindex, skipping"); continue; }
+            None => {
+                warn!(%filename, "no pair in winbindex, skipping");
+                skipped.push(format!("{} (no winbindex pair found)", filename));
+                continue;
+            }
         };
         info!(%filename, confidence = ?pair.confidence, "selected pair");
 
         let post = match wb.download_entry(filename, &pair.patched, &cache).await {
             Ok(b) => b,
-            Err(e) => { warn!(%filename, %e, "download patched failed, skipping"); continue; }
+            Err(e) => {
+                warn!(%filename, %e, "download patched failed, skipping");
+                skipped.push(format!("{} (download patched failed: {})", filename, e));
+                continue;
+            }
         };
         let pre = match wb.download_entry(filename, &pair.previous, &cache).await {
             Ok(b) => b,
-            Err(e) => { warn!(%filename, %e, "download previous failed, skipping"); continue; }
+            Err(e) => {
+                warn!(%filename, %e, "download previous failed, skipping");
+                skipped.push(format!("{} (download previous failed: {})", filename, e));
+                continue;
+            }
         };
 
         let stem = std::path::Path::new(filename)
@@ -182,6 +207,17 @@ pub async fn analyze_cve(
         let e = anyhow!("no winbindex pair found for any triage candidate for {}", cve_id);
         db.update_diff_job_status(job_id, "failed", Some(&e.to_string())).await?;
         return Err(e);
+    }
+
+    if !skipped.is_empty() {
+        warn!(
+            cve = %cve_id,
+            n_diffed = diffed.len(),
+            n_skipped = skipped.len(),
+            skipped = ?skipped,
+            "fetch loop complete: some triage candidates were skipped — \
+             they are NOT in the diff set and their absence does not mean 'no changes'"
+        );
     }
 
     // 5. Synthesis pass
