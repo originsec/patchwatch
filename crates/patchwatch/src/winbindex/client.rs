@@ -139,9 +139,12 @@ pub fn select_pair(
         return Some(PatchPair { patched: patched.clone(), previous: prev, confidence: PairConfidence::ExactKb });
     }
 
-    // Level 2: exact version match from KB CSV
+    // Level 2: exact version match from KB CSV.
+    // Winbindex version strings include a " (WinBuild.160101.0800)" suffix that the
+    // KB CSV version does not, so compare on the bare version prefix (before whitespace).
     if let Some(ver) = fallback_version {
-        if let Some(patched) = arch_entries.iter().find(|v| v.version() == Some(ver)).copied() {
+        let ver_bare = bare_version(ver);
+        if let Some(patched) = arch_entries.iter().find(|v| v.version().map(bare_version) == Some(ver_bare)).copied() {
             let patched_rev = parse_revision(patched.version()?)?;
             let prev = arch_entries.iter()
                 .filter(|&&v| !std::ptr::eq(v, patched))
@@ -164,6 +167,12 @@ pub fn select_pair(
     }
 
     None
+}
+
+/// Strip the " (WinBuild.160101.0800)" suffix from a Winbindex version string,
+/// returning just the bare version number (e.g. "10.0.28000.2113").
+fn bare_version(version: &str) -> &str {
+    version.split_whitespace().next().unwrap_or(version)
 }
 
 fn parse_revision(version: &str) -> Option<u64> {
@@ -233,6 +242,41 @@ mod tests {
         assert_eq!(pair.patched.version(), Some("10.0.22631.4000"));
         assert_eq!(pair.previous.version(), Some("10.0.22631.3880"));
         assert_eq!(pair.confidence, PairConfidence::ExactKb);
+    }
+
+    #[test]
+    fn version_fallback_matches_despite_winbuild_suffix() {
+        // Winbindex version strings include " (WinBuild.160101.0800)" but the KB
+        // CSV version is bare. Level 2 must match on the bare prefix, not the full string.
+        use super::super::types::{FileInfo, WinbindexEntry};
+
+        fn make_entry(version: &str, timestamp: u64) -> WinbindexEntry {
+            WinbindexEntry {
+                file_info: Some(FileInfo {
+                    size: Some(1000),
+                    md5: None,
+                    sha1: None,
+                    sha256: None,
+                    machine_type: Some(34404), // x64
+                    timestamp: Some(timestamp),
+                    virtual_size: Some(0x1000),
+                    version: Some(version.to_string()),
+                    description: None,
+                }),
+                windows_versions: None,
+            }
+        }
+
+        let mut map = HashMap::new();
+        map.insert("patched".to_string(), make_entry("10.0.28000.2113 (WinBuild.160101.0800)", 2000));
+        map.insert("prev".to_string(), make_entry("10.0.28000.2085 (WinBuild.160101.0800)", 1500));
+
+        // KB not in winbindex, but fallback version is the bare "10.0.28000.2113".
+        let pair = select_pair(&map, "KB9999999", Arch::X64, Some("10.0.28000.2113"))
+            .expect("pair should be found via version fallback");
+        assert_eq!(pair.patched.version(), Some("10.0.28000.2113 (WinBuild.160101.0800)"));
+        assert_eq!(pair.previous.version(), Some("10.0.28000.2085 (WinBuild.160101.0800)"));
+        assert_eq!(pair.confidence, PairConfidence::VersionFallback);
     }
 
     #[test]
