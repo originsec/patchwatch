@@ -270,10 +270,15 @@ async fn cve_detail(
     let rankings = state.db.get_triage(&cve_id).await.unwrap_or_default();
     let latest_job = state.db.get_latest_diff_job(&cve_id).await.unwrap_or(None);
     let has_report = latest_job.as_ref().map_or(false, |j| j.status == "done");
-    let triage_eligible = detail.cvss_score.unwrap_or(0.0) >= 9.0 || detail.exploited;
+    let triage_eligible = crate::analyze::ingest::is_triage_eligible(
+        &state.cfg,
+        detail.cvss_score.unwrap_or(0.0),
+        detail.exploited,
+    );
+    let min_cvss_score = state.cfg.llm.min_cvss_score;
     let csrf_token = get_csrf_cookie(req.headers());
 
-    render_html(CveDetailView { detail, rankings, latest_job, has_report, triage_eligible, csrf_token })
+    render_html(CveDetailView { detail, rankings, latest_job, has_report, triage_eligible, min_cvss_score, csrf_token })
 }
 
 async fn trigger_analyze(

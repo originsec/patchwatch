@@ -1,4 +1,4 @@
-use crate::analyze::ingest::ingest_cve;
+use crate::analyze::ingest::{auto_analyze_if_eligible, ingest_cve};
 use crate::config::Config;
 use crate::http::build_client;
 use crate::storage::Db;
@@ -52,6 +52,9 @@ pub async fn run(cfg: &Config, n: usize, release_filter: Option<&str>) -> Result
                 Ok(r) => {
                     println!("[+] {} ingested: KB={} files={} triaged={}", cve_id, r.kb_id, r.n_files, r.n_triaged);
                     total_ingested += 1;
+                    if let Err(e) = auto_analyze_if_eligible(cfg, &db, http_ref, cve_id).await {
+                        warn!(%cve_id, %e, "auto-analyze setup failed");
+                    }
                 }
                 Err(e) => {
                     warn!(%cve_id, %e, "ingest failed, skipping");

@@ -8,6 +8,8 @@ use tracing::info;
 
 /// Run diff + LLM analysis on a single ingested CVE.
 /// Assumes `patchwatch poll` has already ingested the CVE.
+/// Explicit invocations always run — the CVSS threshold only gates the auto-analyze
+/// path inside `poll`.
 pub async fn run(cfg: &Config, cve_id: &str, override_binary: Option<&str>) -> Result<()> {
     let db_path = cfg.storage.base_dir.join("patchwatch.db");
     if !db_path.exists() {
@@ -18,6 +20,7 @@ pub async fn run(cfg: &Config, cve_id: &str, override_binary: Option<&str>) -> R
     // Verify CVE exists
     let detail = db.get_cve(cve_id).await?
         .ok_or_else(|| anyhow!("CVE {} not found in DB; run `patchwatch poll` first", cve_id))?;
+
     info!(%cve_id, kb = ?detail.kb_id, "starting analysis");
 
     let http = build_client("patchwatch/0.1.0 (+analyze)")?;
